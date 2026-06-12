@@ -6,7 +6,7 @@ from backend.models.migration_model import Migration
 from backend.models.history_model import MigrationHistory
 from backend.models.report_model import Report
 from backend.extensions import db
-from backend.utils.helpers import get_placeholder_data, sanitize_string
+from backend.utils.helpers import get_placeholder_data
 from backend.utils.file_handler import resolve_upload_path
 from backend.converters.sql_converter import migrate_sql_to_sql
 from backend.converters.file_to_sql import import_file_to_sql
@@ -16,6 +16,7 @@ from backend.database.connection_manager import create_engine_for_config, _DEFAU
 
 import json
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 
 class SqlToSqlResource(Resource):
@@ -52,7 +53,6 @@ class SqlToSqlResource(Resource):
 
         try:
             report_data = migrate_sql_to_sql(payload)
-            migration_record.status = "completed"
             report = Report(
                 migration_id=migration_record.id,
                 report_format="json",
@@ -63,9 +63,9 @@ class SqlToSqlResource(Resource):
                 ),
             )
             db.session.add(report)
-            db.session.commit()
+            db.session.flush()
+            migration_record.status = "completed"
             migration_record.report_id = report.id
-            db.session.commit()
             history = MigrationHistory(
                 migration_type="sql_to_sql",
                 source_db=migration_record.source_db,
@@ -81,11 +81,11 @@ class SqlToSqlResource(Resource):
                 "report": report_data
             }, 200
         except Exception as exc:
-            migration_record.status = "failed"
-            migration_record.error_message = str(exc)
             db.session.rollback()
-            db.session.add(migration_record)
-            db.session.commit()
+            mig = db.session.get(Migration, migration_record.id)
+            if mig:
+                mig.status = "failed"
+                mig.error_message = str(exc)
             history = MigrationHistory(
                 migration_type="sql_to_sql",
                 source_db=migration_record.source_db,
@@ -116,7 +116,10 @@ class MigrationHistoryResource(Resource):
     """Endpoint to list migration history entries."""
 
     def get(self):
-        history = [record.to_dict() for record in MigrationHistory.query.order_by(MigrationHistory.timestamp.desc()).all()]
+        records = db.session.execute(
+            db.select(MigrationHistory).order_by(MigrationHistory.timestamp.desc())
+        ).scalars().all()
+        history = [record.to_dict() for record in records]
         return {"history": history, "count": len(history)}, 200
 
 
@@ -153,6 +156,10 @@ class FileImportResource(Resource):
             return {"message": "File import completed.", "result": import_result}, 200
         except FileNotFoundError:
             return {"message": f"File not found: {file_path}"}, 404
+        except (ValueError, SQLAlchemyError) as exc:
+            raw = str(exc)
+            short = raw.split("\n")[0].split("(Background")[0].strip()
+            return {"message": "File import failed.", "error": short or raw}, 400
         except Exception as exc:
             return {"message": "File import failed.", "error": str(exc)}, 500
 
@@ -232,14 +239,14 @@ class TestConnectionResource(Resource):
         }
 
         # Per-driver connect timeout (5 s) so a bad host doesn't stall the server
-        _CONNECT_ARGS: dict = {}
+        connect_args: dict = {}
         if db_type in ("postgres", "postgresql"):
-            _CONNECT_ARGS = {"connect_timeout": 5}
+            connect_args = {"connect_timeout": 5}
         elif db_type == "mysql":
-            _CONNECT_ARGS = {"connect_timeout": 5}
+            connect_args = {"connect_timeout": 5}
 
         try:
-            engine = create_engine_for_config(config, connect_args=_CONNECT_ARGS)
+            engine = create_engine_for_config(config, connect_args=connect_args)
             with engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
             return {
