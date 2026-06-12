@@ -12,8 +12,10 @@ from backend.converters.sql_converter import migrate_sql_to_sql
 from backend.converters.file_to_sql import import_file_to_sql
 from backend.converters.sql_to_file import export_sql_to_file
 from backend.processors.schema_generator import generate_create_table_schema
+from backend.database.connection_manager import create_engine_for_config, _DEFAULT_SQLITE_DB_FALLBACK
 
 import json
+from sqlalchemy import text
 
 
 class SqlToSqlResource(Resource):
@@ -21,7 +23,6 @@ class SqlToSqlResource(Resource):
 
     def post(self):
         payload = request.get_json(silent=True) or {}
-        print("PAYLOAD RECEIVED:", payload)
         defaults = {
             "source_db_type": "mysql",
             "source_host": None,
@@ -105,7 +106,7 @@ class MigrationStatusResource(Resource):
     """Endpoint to check the status of a migration by ID."""
 
     def get(self, migration_id: int):
-        migration = Migration.query.get(migration_id)
+        migration = db.session.get(Migration, migration_id)
         if migration is None:
             return {"message": "Migration not found."}, 404
         return {"migration": migration.to_dict()}, 200
@@ -204,3 +205,55 @@ class SchemaGeneratorResource(Resource):
             return {"message": f"File not found: {file_path}"}, 404
         except Exception as exc:
             return {"message": "Schema generation failed.", "error": str(exc)}, 500
+
+
+class TestConnectionResource(Resource):
+    """Endpoint to test a database connection without performing a migration."""
+
+    def post(self):
+        payload = request.get_json(silent=True) or {}
+
+        if not payload:
+            return {"status": "error", "message": "Request body is required."}, 400
+
+        db_type = (payload.get("db_type") or "").strip().lower()
+        if not db_type:
+            return {"status": "error", "message": "db_type is required."}, 400
+
+        config = {
+            "db_type": db_type,
+            "username": payload.get("username") or "",
+            "password": payload.get("password") or "",
+            "host": payload.get("host") or "localhost",
+            "port": payload.get("port") or "",
+            "database": payload.get("database") or (
+                _DEFAULT_SQLITE_DB_FALLBACK if db_type == "sqlite" else ""
+            ),
+        }
+
+        # Per-driver connect timeout (5 s) so a bad host doesn't stall the server
+        _CONNECT_ARGS: dict = {}
+        if db_type in ("postgres", "postgresql"):
+            _CONNECT_ARGS = {"connect_timeout": 5}
+        elif db_type == "mysql":
+            _CONNECT_ARGS = {"connect_timeout": 5}
+
+        try:
+            engine = create_engine_for_config(config, connect_args=_CONNECT_ARGS)
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            return {
+                "status": "ok",
+                "message": f"Connected successfully to {db_type}.",
+                "db_type": db_type,
+            }, 200
+        except Exception as exc:
+            # Strip verbose SQLAlchemy boilerplate from the error message
+            raw = str(exc)
+            # Take only the first meaningful line before the long traceback hint
+            short = raw.split("\n")[0].split("(Background")[0].strip()
+            return {
+                "status": "error",
+                "message": short or raw,
+                "db_type": db_type,
+            }, 200   # Always 200 so the frontend receives JSON, not a fetch error
