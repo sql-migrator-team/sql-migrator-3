@@ -17,7 +17,7 @@
     <header class="page-header">
       <div class="header-content">
         <h1>SQL Migrator</h1>
-        <p>Database Migration & Management Platform</p>
+        <p>Database Migration &amp; Management Platform</p>
       </div>
     </header>
     <main class="content-inner migration-shell">
@@ -65,7 +65,10 @@
               <label for="source-password">Password</label>
               <input id="source-password" type="password" placeholder="••••••••" />
             </div>
-            <button class="button-secondary">Test Connection</button>
+            <div class="test-conn-row">
+              <button id="test-conn-source" class="button-secondary" type="button">Test Connection</button>
+              <span id="conn-status-source" class="conn-status" aria-live="polite"></span>
+            </div>
           </div>
 
           <div class="connection-card">
@@ -101,7 +104,10 @@
               <label for="target-password">Password</label>
               <input id="target-password" type="password" placeholder="••••••••" />
             </div>
-            <button class="button-secondary">Test Connection</button>
+            <div class="test-conn-row">
+              <button id="test-conn-target" class="button-secondary" type="button">Test Connection</button>
+              <span id="conn-status-target" class="conn-status" aria-live="polite"></span>
+            </div>
           </div>
         </div>
         <div class="connection-card" style="grid-column: 1 / -1;">
@@ -152,7 +158,10 @@
               <label for="export-password">Password</label>
               <input id="export-password" type="password" />
             </div>
-            <button class="button-secondary">Test Connection</button>
+            <div class="test-conn-row">
+              <button id="test-conn-export" class="button-secondary" type="button">Test Connection</button>
+              <span id="conn-status-export" class="conn-status" aria-live="polite"></span>
+            </div>
           </div>
 
           <div class="connection-card">
@@ -186,12 +195,14 @@
         <div class="panel-grid">
           <div class="connection-card file-uploader">
             <h3>File Upload</h3>
-            <div class="uploader-box" aria-label="File drop zone">
-              <p>Drag and drop your CSV, JSON or Excel file here</p>
-              <p>or</p>
-              <input id="source-file" type="file" accept=".csv,.json,.xlsx,.xls" />
+            <div class="uploader-box" id="drop-zone" aria-label="File drop zone">
+              <div class="uploader-icon">📂</div>
+              <p>Drag &amp; drop your file here</p>
+              <p class="small-text">Supports CSV, JSON, Excel (.xlsx/.xls) and SQL dumps (.sql)</p>
+              <label class="upload-btn" for="source-file">Browse File</label>
+              <input id="source-file" type="file" accept=".csv,.json,.xlsx,.xls,.sql" />
             </div>
-            <p id="file-preview" class="small-text">No file selected.</p>
+            <p id="file-preview" class="small-text file-preview-text">No file selected.</p>
           </div>
 
           <div class="connection-card">
@@ -209,15 +220,15 @@
             </div>
             <div class="input-group">
               <label for="file-target-host">Host</label>
-              <input id="file-target-host" type="text" />
+              <input id="file-target-host" type="text" placeholder="127.0.0.1" />
             </div>
             <div class="input-group">
               <label for="file-target-port">Port</label>
-              <input id="file-target-port" type="text" />
+              <input id="file-target-port" type="text" placeholder="5432" />
             </div>
             <div class="input-group">
               <label for="file-target-db-name">Database Name</label>
-              <input id="file-target-db-name" type="text" />
+              <input id="file-target-db-name" type="text" placeholder="Leave blank for default SQLite" />
             </div>
             <div class="input-group">
               <label for="file-target-username">Username</label>
@@ -227,7 +238,29 @@
               <label for="file-target-password">Password</label>
               <input id="file-target-password" type="password" />
             </div>
-            <button class="button-secondary">Test Connection</button>
+            <div class="test-conn-row">
+              <button id="test-conn-file-target" class="button-secondary" type="button">Test Connection</button>
+              <span id="conn-status-file-target" class="conn-status" aria-live="polite"></span>
+            </div>
+          </div>
+
+          <div class="connection-card" style="grid-column: 1 / -1;">
+            <h3>Import Options</h3>
+            <div class="panel-grid" style="gap:16px;">
+              <div class="input-group">
+                <label for="file-target-table">Target Table Name <span class="small-text">(tabular files only — leave blank to use filename)</span></label>
+                <input id="file-target-table" type="text" placeholder="my_imported_table" />
+              </div>
+              <div class="input-group">
+                <label for="file-if-exists">If Table Already Exists</label>
+                <select id="file-if-exists">
+                  <option value="replace">Replace (drop &amp; recreate)</option>
+                  <option value="append">Append rows</option>
+                  <option value="fail">Fail if exists</option>
+                </select>
+              </div>
+            </div>
+            <p class="small-text">For <strong>.sql</strong> dump files the table name and if-exists options are ignored — statements are executed directly.</p>
           </div>
         </div>
         <form id="file-to-sql-form" data-action="file-to-sql" class="action-row">
@@ -265,17 +298,6 @@
       });
     }
     if (typeof initMigrationPage === 'function') initMigrationPage();
-
-    // Tab switching
-    document.querySelectorAll('.migration-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        document.querySelectorAll('.migration-tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.migration-panel').forEach(p => p.classList.add('hidden'));
-        tab.classList.add('active');
-        const target = document.getElementById(tab.dataset.target);
-        if (target) target.classList.remove('hidden');
-      });
-    });
   </script>
 </body>
 </html>
