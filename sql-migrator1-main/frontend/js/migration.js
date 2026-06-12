@@ -118,25 +118,6 @@ function initMigrationPage() {
       appendLog(`Importing to ${payload.get('target_db_type')}...`);
       const response = await apiRequest('/import/file-to-sql', 'POST', payload);
       handleMigrationResponse(response);
-
-      // Show extra details for successful imports
-      if (response && response.result) {
-        const r = response.result;
-        if (r.import_type === 'sql_dump') {
-          appendLog(`✅ SQL dump executed: <strong>${r.statements_executed}</strong> statements, <strong>${r.statements_skipped}</strong> skipped.`);
-          if (r.target_database) {
-            appendLog(`Target Database: <code>${escapeHtml(r.target_database)}</code>`);
-          }
-        } else if (r.rows_imported != null) {
-          appendLog(`✅ Imported <strong>${r.rows_imported}</strong> rows into <code>${r.table_name}</code>.`);
-          if (r.target_database) {
-            appendLog(`Target Database: <code>${escapeHtml(r.target_database)}</code>`);
-          }
-          if (r.schema_sql) {
-            appendLog(`<details><summary style="cursor:pointer;color:var(--accent)">View generated schema SQL</summary><pre style="margin-top:8px;overflow:auto">${escapeHtml(r.schema_sql)}</pre></details>`);
-          }
-        }
-      }
     });
   }
 
@@ -344,11 +325,11 @@ function handleMigrationResponse(response) {
     if (pct) pct.textContent = '100%';
   } else {
     if (response.message) appendLog(response.message);
-    simulateMigrationProgress();
+    simulateMigrationProgress(response);
   }
 }
 
-function simulateMigrationProgress() {
+function simulateMigrationProgress(response) {
   const progress = document.getElementById('migration-progress-fill');
   const progressText = document.getElementById('migration-progress-status');
   const logs = document.getElementById('migration-logs');
@@ -366,7 +347,28 @@ function simulateMigrationProgress() {
     }
     if (percentage >= 100) {
       clearInterval(interval);
-      if (logs) logs.innerHTML += '<p class="log-line status-success">Migration completed successfully.</p>';
+      if (logs) {
+        const isImport = response && response.result && (response.result.import_type === 'sql_dump' || response.result.rows_imported != null);
+        logs.innerHTML += `<p class="log-line status-success">${isImport ? 'Import' : 'Migration'} completed successfully.</p>`;
+      }
+      // Show extra details for successful imports
+      if (response && response.result) {
+        const r = response.result;
+        if (r.import_type === 'sql_dump') {
+          appendLog(`✅ SQL dump executed: <strong>${r.statements_executed}</strong> statements, <strong>${r.statements_skipped}</strong> skipped.`);
+          if (r.target_database) {
+            appendLog(`Target Database: <code>${escapeHtml(r.target_database)}</code>`);
+          }
+        } else if (r.rows_imported != null) {
+          appendLog(`✅ Imported <strong>${r.rows_imported}</strong> rows into <code>${r.table_name}</code>.`);
+          if (r.target_database) {
+            appendLog(`Target Database: <code>${escapeHtml(r.target_database)}</code>`);
+          }
+          if (r.schema_sql) {
+            appendLog(`<details><summary style="cursor:pointer;color:var(--accent)">View generated schema SQL</summary><pre style="margin-top:8px;overflow:auto">${escapeHtml(r.schema_sql)}</pre></details>`);
+          }
+        }
+      }
     }
   }, 700);
 }
