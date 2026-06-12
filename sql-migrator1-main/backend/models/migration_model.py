@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 from backend.extensions import db
 
 
@@ -15,6 +16,27 @@ class Migration(db.Model):
     report_id = db.Column(db.Integer, db.ForeignKey("reports.id"), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __init__(
+        self,
+        migration_type: str,
+        source_db: str,
+        target_db: str,
+        status: str = "pending",
+        error_message: Optional[str] = None,
+        report_id: Optional[int] = None,
+    ) -> None:
+        """Explicit constructor so type checkers recognize all column kwargs.
+
+        SQLAlchemy generates this automatically at runtime; we declare it
+        explicitly only to satisfy static analysis tools (Pyrefly / Pylance).
+        """
+        self.migration_type = migration_type
+        self.source_db = source_db
+        self.target_db = target_db
+        self.status = status
+        self.error_message = error_message
+        self.report_id = report_id
 
     def to_dict(self) -> dict:
         return {
