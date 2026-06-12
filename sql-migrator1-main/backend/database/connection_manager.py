@@ -54,8 +54,9 @@ def create_engine_for_config(config: Dict[str, Any], connect_args: Optional[Dict
         )
     if db_type == "sqlserver":
         # SQL Server uses pyodbc or pymssql — fall back to a basic mssql URL
-        user = config.get("username", "")
-        pwd = config.get("password", "")
+        from urllib.parse import quote_plus
+        user = quote_plus(config.get("username", ""))
+        pwd = quote_plus(config.get("password", ""))
         host = config.get("host", "localhost")
         port = config.get("port", "1433")
         database = config.get("database", "")
