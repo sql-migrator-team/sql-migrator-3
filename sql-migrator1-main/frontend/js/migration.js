@@ -112,8 +112,8 @@ function initMigrationPage() {
 
       if (!isSqlDump) {
         payload.append('target_table', getVal('file-target-table'));
-        payload.append('if_exists', getVal('file-if-exists'));
       }
+      payload.append('if_exists', getVal('file-if-exists'));
 
       appendLog(`Importing to ${payload.get('target_db_type')}...`);
       const response = await apiRequest('/import/file-to-sql', 'POST', payload);
