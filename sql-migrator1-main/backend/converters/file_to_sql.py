@@ -1,4 +1,5 @@
 import os
+import json
 import pandas as pd
 from typing import Dict, Any
 from backend.database.connection_manager import create_engine_for_config
@@ -7,31 +8,62 @@ from backend.processors.excel_processor import read_excel_file
 from backend.processors.schema_generator import generate_create_table_schema
 from backend.utils.file_handler import resolve_upload_path
 
+# Absolute path to the default SQLite database, resolved relative to this file
+_DEFAULT_SQLITE_DB = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "database", "app_data.db")
+)
+
+
+def _read_file(file_path: str) -> pd.DataFrame:
+    """Read a CSV, JSON, or Excel file into a pandas DataFrame."""
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext == ".csv":
+        return read_csv_file(file_path)
+    if ext == ".json":
+        with open(file_path, "r", encoding="utf-8") as fh:
+            raw = json.load(fh)
+        # Accept both a list-of-records and a dict with a data key
+        if isinstance(raw, list):
+            return pd.DataFrame(raw)
+        if isinstance(raw, dict):
+            # Try common wrapper keys
+            for key in ("data", "rows", "records", "results"):
+                if key in raw and isinstance(raw[key], list):
+                    return pd.DataFrame(raw[key])
+            return pd.DataFrame([raw])
+        raise ValueError(f"Unsupported JSON structure in {file_path}.")
+    if ext in (".xlsx", ".xls"):
+        return read_excel_file(file_path)
+    raise ValueError(
+        f"Unsupported file extension '{ext}'. Supported types: .csv, .json, .xlsx, .xls"
+    )
+
 
 def import_file_to_sql(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Import a CSV or Excel file into a SQL database table."""
+    """Import a CSV, JSON, or Excel file into a SQL database table."""
     file_path = payload.get("file_path")
     if file_path is None:
         raise ValueError("File path is required for import.")
 
-    _, extension = os.path.splitext(file_path)
-    if extension.lower() in [".csv"]:
-        data_frame = read_csv_file(file_path)
-    else:
-        data_frame = read_excel_file(file_path)
+    if not os.path.isfile(file_path):
+        raise FileNotFoundError(f"File not found: {file_path}")
 
+    data_frame = _read_file(file_path)
+
+    # Use absolute path as the default SQLite database so it works regardless of CWD
+    target_database = payload.get("target_database") or _DEFAULT_SQLITE_DB
     target_config = {
         "db_type": payload.get("target_db_type", "sqlite"),
         "username": payload.get("target_username", ""),
         "password": payload.get("target_password", ""),
         "host": payload.get("target_host", "localhost"),
         "port": payload.get("target_port", ""),
-        "database": payload.get("target_database", "./backend/database/app_data.db"),
+        "database": target_database,
     }
     target_engine = create_engine_for_config(target_config)
     table_name = payload.get("target_table") or os.path.splitext(os.path.basename(file_path))[0]
 
-    data_frame.to_sql(table_name, target_engine, if_exists=payload.get("if_exists", "append"), index=False)
+    data_frame.to_sql(table_name, target_engine, if_exists=payload.get("if_exists", "replace"), index=False)
 
     schema_sql = generate_create_table_schema(file_path, table_name)
     return {
