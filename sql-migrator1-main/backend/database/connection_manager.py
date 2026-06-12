@@ -47,4 +47,8 @@ def create_engine_for_config(config: Dict[str, Any]) -> Engine:
         from sqlalchemy import create_engine
         url = f"mssql+pymssql://{user}:{pwd}@{host}:{port}/{database}"
         return create_engine(url)
-    raise ValueError(f"Unsupported database type: {db_type}")
+    supported = ["mysql", "postgresql", "postgres", "sqlite", "oracle", "sqlserver"]
+    raise ValueError(
+        f"Unsupported database type: '{db_type}'. "
+        f"Please select one of: {', '.join(supported)}."
+    )
