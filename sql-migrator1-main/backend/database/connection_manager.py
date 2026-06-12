@@ -1,4 +1,5 @@
 from typing import Any, Dict
+import os
 
 from sqlalchemy.engine import Engine
 
@@ -6,6 +7,11 @@ from .mysql_connection import create_mysql_engine
 from .postgres_connection import create_postgres_engine
 from .sqlite_connection import create_sqlite_engine
 from .oracle_connection import create_oracle_engine
+
+# Default SQLite DB path (absolute, resolved relative to this file)
+_DEFAULT_SQLITE_DB_FALLBACK = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "app_data.db")
+)
 
 
 def create_engine_for_config(config: Dict[str, Any]) -> Engine:
