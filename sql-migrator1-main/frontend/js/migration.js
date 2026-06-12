@@ -278,8 +278,6 @@ function bindTestConnections() {
         setConnStatus(statusEl, 'error', '❌ Network error');
       } finally {
         btn.disabled = false;
-        // Auto-clear after 8 s
-        setTimeout(() => setConnStatus(statusEl, '', ''), 8000);
       }
     });
   });
