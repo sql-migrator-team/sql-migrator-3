@@ -25,6 +25,21 @@ def generate_create_table_schema(file_path: str, table_name: Optional[str] = Non
     extension = os.path.splitext(file_path)[1].lower()
     if extension == ".csv":
         data_frame = pd.read_csv(file_path)
+    elif extension == ".json":
+        import json as _json
+        with open(file_path, "r", encoding="utf-8") as fh:
+            raw = _json.load(fh)
+        if isinstance(raw, list):
+            data_frame = pd.DataFrame(raw)
+        elif isinstance(raw, dict):
+            for key in ("data", "rows", "records", "results"):
+                if key in raw and isinstance(raw[key], list):
+                    data_frame = pd.DataFrame(raw[key])
+                    break
+            else:
+                data_frame = pd.DataFrame([raw])
+        else:
+            data_frame = pd.DataFrame()
     else:
         data_frame = pd.read_excel(file_path)
 
