@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 import os
 
 from sqlalchemy.engine import Engine
@@ -14,8 +14,15 @@ _DEFAULT_SQLITE_DB_FALLBACK = os.path.abspath(
 )
 
 
-def create_engine_for_config(config: Dict[str, Any]) -> Engine:
-    """Create a SQLAlchemy engine based on common application configuration."""
+def create_engine_for_config(config: Dict[str, Any], connect_args: Optional[Dict[str, Any]] = None) -> Engine:
+    """Create a SQLAlchemy engine based on common application configuration.
+
+    Args:
+        config: dict with keys db_type, username, password, host, port, database.
+        connect_args: optional dict passed through to SQLAlchemy's ``connect_args``
+            (e.g. ``{"connect_timeout": 5}`` for Postgres/MySQL).
+    """
+    connect_args = connect_args or {}
     db_type = (config.get("db_type") or "").lower().strip()
     if db_type == "mysql":
         return create_mysql_engine(
@@ -24,6 +31,7 @@ def create_engine_for_config(config: Dict[str, Any]) -> Engine:
             host=config.get("host", "localhost"),
             port=config.get("port", "3306"),
             database=config.get("database", ""),
+            connect_args=connect_args,
         )
     if db_type in ("postgresql", "postgres"):
         return create_postgres_engine(
@@ -32,6 +40,7 @@ def create_engine_for_config(config: Dict[str, Any]) -> Engine:
             host=config.get("host", "localhost"),
             port=config.get("port", "5432"),
             database=config.get("database", ""),
+            connect_args=connect_args,
         )
     if db_type == "sqlite":
         return create_sqlite_engine(config.get("database", ":memory:"))
@@ -52,9 +61,10 @@ def create_engine_for_config(config: Dict[str, Any]) -> Engine:
         database = config.get("database", "")
         from sqlalchemy import create_engine
         url = f"mssql+pymssql://{user}:{pwd}@{host}:{port}/{database}"
-        return create_engine(url)
+        return create_engine(url, connect_args=connect_args)
     supported = ["mysql", "postgresql", "postgres", "sqlite", "oracle", "sqlserver"]
     raise ValueError(
         f"Unsupported database type: '{db_type}'. "
         f"Please select one of: {', '.join(supported)}."
     )
+
