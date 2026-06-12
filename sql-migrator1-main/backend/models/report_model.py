@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 from backend.extensions import db
 
 
@@ -12,6 +13,23 @@ class Report(db.Model):
     file_path = db.Column(db.String(512), nullable=True)
     summary = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __init__(
+        self,
+        report_format: str,
+        migration_id: Optional[int] = None,
+        file_path: Optional[str] = None,
+        summary: Optional[str] = None,
+    ) -> None:
+        """Explicit constructor so type checkers recognize all column kwargs.
+
+        SQLAlchemy generates this automatically at runtime; we declare it
+        explicitly only to satisfy static analysis tools (Pyrefly / Pylance).
+        """
+        self.report_format = report_format
+        self.migration_id = migration_id
+        self.file_path = file_path
+        self.summary = summary
 
     def to_dict(self) -> dict:
         return {
