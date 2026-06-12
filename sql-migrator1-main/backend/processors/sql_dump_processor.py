@@ -11,10 +11,10 @@ Strategy (strict/transactional):
 
 import re
 import os
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from sqlalchemy.engine import Engine
-from sqlalchemy import text
+from sqlalchemy import text, inspect
 
 
 # ---------------------------------------------------------------------------
@@ -91,27 +91,75 @@ def parse_sql_statements(sql_text: str) -> List[str]:
     return statements
 
 
-def import_sql_dump(file_path: str, target_engine: Engine) -> Dict[str, Any]:
+def extract_table_name_from_create(stmt: str) -> Optional[str]:
+    """Extract table name from a CREATE TABLE statement."""
+    match = re.search(
+        r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([`\"\w\.-]+)",
+        stmt,
+        re.IGNORECASE
+    )
+    if match:
+        name = match.group(1)
+        return name.replace("`", "").replace('"', "").strip()
+    return None
+
+
+def import_sql_dump(file_path: str, target_engine: Engine, if_exists: str = "fail") -> Dict[str, Any]:
     """Read *file_path* and execute all SQL statements against *target_engine*.
 
-    Returns a summary dict::
-
-        {
-            "statements_executed": <int>,
-            "statements_skipped":  <int>,
-            "target_database":     <str>,
-        }
-
-    Raises on the first non-skipped statement that fails, rolling back the
-    entire transaction so the database is never left in a partial state.
+    Handles table collisions:
+    - fail: raises ValueError if any table to create already exists.
+    - replace: drops existing conflicting tables before execution.
+    - append: converts CREATE TABLE to CREATE TABLE IF NOT EXISTS.
     """
     if not os.path.isfile(file_path):
         raise FileNotFoundError(f"SQL dump not found: {file_path}")
+
+    if_exists = if_exists.strip().lower()
 
     with open(file_path, "r", encoding="utf-8", errors="replace") as fh:
         raw_sql = fh.read()
 
     statements = parse_sql_statements(raw_sql)
+
+    # 1. Check for table collisions
+    tables_to_create = []
+    for stmt in statements:
+        if stmt.strip().upper().startswith("CREATE TABLE"):
+            tname = extract_table_name_from_create(stmt)
+            if tname:
+                tables_to_create.append(tname)
+
+    if tables_to_create:
+        try:
+            existing_tables = inspect(target_engine).get_table_names()
+        except Exception:
+            existing_tables = []
+
+        overlap = [t for t in tables_to_create if t in existing_tables]
+        if overlap:
+            if if_exists == "fail":
+                tables_str = ", ".join(f"'{t}'" for t in overlap)
+                raise ValueError(
+                    f"Table(s) {tables_str} already exist in the target database. "
+                    "Please select 'Replace' to overwrite existing tables, or 'Append' to add rows."
+                )
+            elif if_exists == "replace":
+                with target_engine.begin() as conn:
+                    for t in overlap:
+                        quoted_t = target_engine.dialect.identifier_preparer.quote(t)
+                        conn.execute(text(f"DROP TABLE IF EXISTS {quoted_t}"))
+            elif if_exists == "append":
+                for idx, stmt in enumerate(statements):
+                    if stmt.strip().upper().startswith("CREATE TABLE"):
+                        if "IF NOT EXISTS" not in stmt.upper():
+                            statements[idx] = re.sub(
+                                r"\bCREATE\s+TABLE\b",
+                                "CREATE TABLE IF NOT EXISTS",
+                                stmt,
+                                count=1,
+                                flags=re.IGNORECASE
+                            )
 
     executed = 0
     skipped = 0
