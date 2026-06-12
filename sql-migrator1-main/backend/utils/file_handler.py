@@ -29,7 +29,7 @@ def save_text_report(path: str, content: str) -> None:
 
 def get_supported_csv_extensions() -> list[str]:
     """Supported upload file extensions."""
-    return [".csv", ".xlsx", ".xls"]
+    return [".csv", ".xlsx", ".xls", ".json"]
 
 
 def is_valid_file_path(file_path: str) -> bool:
