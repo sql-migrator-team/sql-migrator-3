@@ -14,7 +14,7 @@ from flask_restful import Api
 from backend.config import Config
 from backend.extensions import db, jwt
 from backend.auth.auth_routes import RegisterResource, LoginResource, LogoutResource
-from backend.routes.migration_routes import SqlToSqlResource, MigrationStatusResource, MigrationHistoryResource, FileImportResource, SqlExportResource, SchemaGeneratorResource
+from backend.routes.migration_routes import SqlToSqlResource, MigrationStatusResource, MigrationHistoryResource, FileImportResource, SqlExportResource, SchemaGeneratorResource, TestConnectionResource
 from backend.routes.history_routes import HistoryListResource, HistoryDeleteResource
 from backend.routes.admin_routes import AdminUserListResource, AdminUserDeleteResource, AdminStatsResource
 from backend.routes.report_routes import ReportResource
@@ -50,6 +50,7 @@ def create_app() -> Flask:
     api.add_resource(FileImportResource, "/api/import/file-to-sql")
     api.add_resource(SqlExportResource, "/api/export/sql-to-file")
     api.add_resource(SchemaGeneratorResource, "/api/schema/generate")
+    api.add_resource(TestConnectionResource, "/api/test-connection")
 
     # History endpoints
     api.add_resource(HistoryListResource, "/api/history")
