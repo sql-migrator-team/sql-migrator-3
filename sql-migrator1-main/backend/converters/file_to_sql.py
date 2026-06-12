@@ -11,7 +11,7 @@ from backend.utils.file_handler import resolve_upload_path
 
 # Absolute path to the default SQLite database, resolved relative to this file
 _DEFAULT_SQLITE_DB = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "database", "app_data.db")
+    os.path.join(os.path.dirname(__file__), "..", "database", "migration_target.db")
 )
 
 
@@ -58,10 +58,20 @@ def import_file_to_sql(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     ext = os.path.splitext(file_path)[1].lower()
 
-    # Use absolute path as the default SQLite database so it works regardless of CWD
-    target_database = payload.get("target_database") or _DEFAULT_SQLITE_DB
+    target_db_type = (payload.get("target_db_type") or "sqlite").strip().lower()
+    target_database = (payload.get("target_database") or "").strip()
+
+    # Default SQLite target database configuration to avoid app_data.db conflicts
+    if not target_database and target_db_type == "sqlite":
+        target_database = _DEFAULT_SQLITE_DB
+    elif target_db_type == "sqlite" and not os.path.isabs(target_database):
+        # Resolve relative SQLite paths relative to the database directory
+        target_database = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "database", target_database)
+        )
+
     target_config = {
-        "db_type": payload.get("target_db_type", "sqlite"),
+        "db_type": target_db_type,
         "username": payload.get("target_username", ""),
         "password": payload.get("target_password", ""),
         "host": payload.get("target_host", "localhost"),
