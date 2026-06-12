@@ -124,8 +124,14 @@ function initMigrationPage() {
         const r = response.result;
         if (r.import_type === 'sql_dump') {
           appendLog(`✅ SQL dump executed: <strong>${r.statements_executed}</strong> statements, <strong>${r.statements_skipped}</strong> skipped.`);
+          if (r.target_database) {
+            appendLog(`Target Database: <code>${escapeHtml(r.target_database)}</code>`);
+          }
         } else if (r.rows_imported != null) {
           appendLog(`✅ Imported <strong>${r.rows_imported}</strong> rows into <code>${r.table_name}</code>.`);
+          if (r.target_database) {
+            appendLog(`Target Database: <code>${escapeHtml(r.target_database)}</code>`);
+          }
           if (r.schema_sql) {
             appendLog(`<details><summary style="cursor:pointer;color:var(--accent)">View generated schema SQL</summary><pre style="margin-top:8px;overflow:auto">${escapeHtml(r.schema_sql)}</pre></details>`);
           }
