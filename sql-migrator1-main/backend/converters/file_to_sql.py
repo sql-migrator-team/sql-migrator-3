@@ -63,6 +63,10 @@ def import_file_to_sql(payload: Dict[str, Any]) -> Dict[str, Any]:
     target_engine = create_engine_for_config(target_config)
     table_name = payload.get("target_table") or os.path.splitext(os.path.basename(file_path))[0]
 
+    # Sanitize column names: strip surrounding whitespace to avoid hard-to-query column names
+    # (e.g. 'selling rate ' with trailing space becomes 'selling rate')
+    data_frame.columns = [col.strip() for col in data_frame.columns]
+
     data_frame.to_sql(table_name, target_engine, if_exists=payload.get("if_exists", "replace"), index=False)
 
     schema_sql = generate_create_table_schema(file_path, table_name)
