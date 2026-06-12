@@ -6,6 +6,7 @@ from backend.database.connection_manager import create_engine_for_config
 from backend.processors.csv_processor import read_csv_file
 from backend.processors.excel_processor import read_excel_file
 from backend.processors.schema_generator import generate_create_table_schema
+from backend.processors.sql_dump_processor import import_sql_dump
 from backend.utils.file_handler import resolve_upload_path
 
 # Absolute path to the default SQLite database, resolved relative to this file
@@ -40,7 +41,14 @@ def _read_file(file_path: str) -> pd.DataFrame:
 
 
 def import_file_to_sql(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Import a CSV, JSON, or Excel file into a SQL database table."""
+    """Import a CSV, JSON, Excel, or SQL dump file into a target database.
+
+    For tabular files (.csv/.json/.xlsx/.xls) the data is loaded via pandas
+    and written with ``DataFrame.to_sql``.
+
+    For SQL dump files (.sql) the statements are executed directly against
+    the target engine inside a single transaction (strict mode).
+    """
     file_path = payload.get("file_path")
     if file_path is None:
         raise ValueError("File path is required for import.")
@@ -48,7 +56,7 @@ def import_file_to_sql(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not os.path.isfile(file_path):
         raise FileNotFoundError(f"File not found: {file_path}")
 
-    data_frame = _read_file(file_path)
+    ext = os.path.splitext(file_path)[1].lower()
 
     # Use absolute path as the default SQLite database so it works regardless of CWD
     target_database = payload.get("target_database") or _DEFAULT_SQLITE_DB
@@ -61,6 +69,22 @@ def import_file_to_sql(payload: Dict[str, Any]) -> Dict[str, Any]:
         "database": target_database,
     }
     target_engine = create_engine_for_config(target_config)
+
+    # ------------------------------------------------------------------ SQL dump
+    if ext == ".sql":
+        dump_result = import_sql_dump(file_path, target_engine)
+        return {
+            "import_type": "sql_dump",
+            "file_name": os.path.basename(file_path),
+            "statements_executed": dump_result["statements_executed"],
+            "statements_skipped": dump_result["statements_skipped"],
+            "rows_imported": None,
+            "schema_sql": None,
+            "target_database": dump_result["target_database"],
+        }
+
+    # ------------------------------------------------ Tabular: CSV / JSON / Excel
+    data_frame = _read_file(file_path)
     table_name = payload.get("target_table") or os.path.splitext(os.path.basename(file_path))[0]
 
     # Sanitize column names: strip surrounding whitespace to avoid hard-to-query column names
@@ -71,6 +95,8 @@ def import_file_to_sql(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     schema_sql = generate_create_table_schema(file_path, table_name)
     return {
+        "import_type": "tabular",
+        "file_name": os.path.basename(file_path),
         "table_name": table_name,
         "rows_imported": int(data_frame.shape[0]),
         "schema_sql": schema_sql,
